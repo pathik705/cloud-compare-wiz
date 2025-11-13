@@ -3,9 +3,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, Loader2 } from "lucide-react";
+import { ArrowUpDown, Loader2, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 interface CloudService {
   provider: string;
@@ -27,6 +35,10 @@ const ComparisonTable = () => {
   const [loading, setLoading] = useState(true);
   const [sortField, setSortField] = useState<SortField>('pricePerMonth');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [selectedProviders, setSelectedProviders] = useState<string[]>(['AWS', 'GCP', 'Azure']);
+  const [selectedRegion, setSelectedRegion] = useState<string>('all');
+  const [minPrice, setMinPrice] = useState<string>('0');
+  const [maxPrice, setMaxPrice] = useState<string>('1000');
 
   useEffect(() => {
     fetchPricing();
@@ -59,7 +71,25 @@ const ComparisonTable = () => {
     }
   };
 
-  const sortedServices = [...services].sort((a, b) => {
+  const toggleProvider = (provider: string) => {
+    setSelectedProviders(prev => 
+      prev.includes(provider)
+        ? prev.filter(p => p !== provider)
+        : [...prev, provider]
+    );
+  };
+
+  const uniqueRegions = ['all', ...new Set(services.map(s => s.region))];
+
+  const filteredServices = services.filter(service => {
+    const providerMatch = selectedProviders.includes(service.provider);
+    const regionMatch = selectedRegion === 'all' || service.region === selectedRegion;
+    const priceMatch = service.pricePerMonth >= parseFloat(minPrice) && 
+                       service.pricePerMonth <= parseFloat(maxPrice);
+    return providerMatch && regionMatch && priceMatch;
+  });
+
+  const sortedServices = [...filteredServices].sort((a, b) => {
     const aValue = a[sortField];
     const bValue = b[sortField];
     const multiplier = sortOrder === 'asc' ? 1 : -1;
@@ -100,7 +130,98 @@ const ComparisonTable = () => {
           Compare pricing, features, and offerings across AWS, GCP, and Azure
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-6">
+        {/* Filter Section */}
+        <div className="p-4 rounded-lg bg-muted/30 border border-border/50 space-y-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Filter className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold text-lg">Filters</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Provider Selection */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Cloud Providers</Label>
+              <div className="flex flex-wrap gap-2">
+                {['AWS', 'GCP', 'Azure'].map(provider => (
+                  <Button
+                    key={provider}
+                    variant={selectedProviders.includes(provider) ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => toggleProvider(provider)}
+                    className={
+                      selectedProviders.includes(provider)
+                        ? provider === 'AWS'
+                          ? 'bg-orange-500 hover:bg-orange-600'
+                          : provider === 'GCP'
+                          ? 'bg-blue-500 hover:bg-blue-600'
+                          : 'bg-cyan-500 hover:bg-cyan-600'
+                        : ''
+                    }
+                  >
+                    {provider}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Region Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="region-select" className="text-sm font-medium">Region</Label>
+              <Select value={selectedRegion} onValueChange={setSelectedRegion}>
+                <SelectTrigger id="region-select" className="bg-background/50 border-border/50">
+                  <SelectValue placeholder="Select region" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border z-50">
+                  {uniqueRegions.map(region => (
+                    <SelectItem key={region} value={region} className="cursor-pointer">
+                      {region === 'all' ? 'All Regions' : region}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Min Price */}
+            <div className="space-y-2">
+              <Label htmlFor="min-price" className="text-sm font-medium">Min Price ($/month)</Label>
+              <Select value={minPrice} onValueChange={setMinPrice}>
+                <SelectTrigger id="min-price" className="bg-background/50 border-border/50">
+                  <SelectValue placeholder="Min price" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border z-50">
+                  <SelectItem value="0" className="cursor-pointer">$0</SelectItem>
+                  <SelectItem value="20" className="cursor-pointer">$20</SelectItem>
+                  <SelectItem value="50" className="cursor-pointer">$50</SelectItem>
+                  <SelectItem value="100" className="cursor-pointer">$100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Max Price */}
+            <div className="space-y-2">
+              <Label htmlFor="max-price" className="text-sm font-medium">Max Price ($/month)</Label>
+              <Select value={maxPrice} onValueChange={setMaxPrice}>
+                <SelectTrigger id="max-price" className="bg-background/50 border-border/50">
+                  <SelectValue placeholder="Max price" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border z-50">
+                  <SelectItem value="50" className="cursor-pointer">$50</SelectItem>
+                  <SelectItem value="100" className="cursor-pointer">$100</SelectItem>
+                  <SelectItem value="200" className="cursor-pointer">$200</SelectItem>
+                  <SelectItem value="1000" className="cursor-pointer">$1000+</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="text-sm text-muted-foreground pt-2 border-t border-border/30">
+            Showing <span className="font-semibold text-foreground">{sortedServices.length}</span> of{" "}
+            <span className="font-semibold text-foreground">{services.length}</span> services
+          </div>
+        </div>
+        {/* Comparison Table */}
         <div className="rounded-lg border border-border/50 overflow-hidden">
           <Table>
             <TableHeader>
